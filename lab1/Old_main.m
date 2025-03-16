@@ -9,8 +9,8 @@ end_point = [180, 10];
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
 block_size = 5;          % Rozmiar przeszkód
-num_obstacles = 10;       % Liczba przeszkód do wygenerowania
-numNodesList = [50, 100, 1000]; % Liczby węzłów do testowania
+num_obstacles = 0;       % Liczba przeszkód do wygenerowania
+numNodesList = [10, 100, 1000]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
 
