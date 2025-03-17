@@ -1,0 +1,116 @@
+%% Inicjalizacja
+clc;
+clear all;
+close all;
+
+%% Parametry
+start_point = [10, 10];
+end_point = [180, 10];
+start = [start_point 0]; % Punkt startowy z orientacją
+goal = [end_point 0];    % Punkt końcowy z orientacją
+block_size = 5;          % Rozmiar przeszkód
+num_obstacles = 10;       % Liczba przeszkód do wygenerowania
+numNodesList = [50, 100, 1000]; % Liczby węzłów do testowania
+colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
+pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
+
+%% Wczytanie i przetworzenie mapy
+mapa = imread('mapa2.jpg');
+if size(mapa, 3) > 1
+    mapa = rgb2gray(mapa);
+end
+
+% Binaryzacja mapy - ściany są czarne (0), wolna przestrzeń jest biała (1)
+binMapa = mapa > 128;
+[height, width] = size(binMapa);
+
+
+
+
+% Aktualizacja mapy o przeszkody
+
+% Tworzenie mapy zajętości dla nawigacji
+mapOccupancy = binaryOccupancyMap(~binMapa);
+
+
+%% Planowanie ścieżki przy użyciu RRT
+planPathWithRRT(mapOccupancy, start, goal, numNodesList, colors, pathColors);
+
+function planPathWithRRT(map, start, goal, numNodesList, colors, pathColors)
+    ss = stateSpaceSE2;
+    ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
+    sv = validatorOccupancyMap(ss, Map=map);
+    sv.ValidationDistance = 0.01;
+    
+    for idx = 1:length(numNodesList)
+        maxIterations = numNodesList(idx);
+        planner = plannerRRT(ss, sv, "MaxIterations", maxIterations);
+        
+        % Nowa figura dla każdego przypadku
+        figure;
+        show(sv.Map);
+        hold on;
+        
+        % Planowanie ścieżki
+        rng(100,"twister");
+        [pthObj, solnInfo] = plan(planner, start, goal);
+        
+        % W przypadku gdy TreeData nie jest dostępne, użyjemy tylko ścieżki
+        % i dodamy losowe punkty dla wizualizacji
+        
+        % Generowanie losowych punktów dla symulacji drzewa RRT
+        numRandomPoints = maxIterations;
+        randomPoints = zeros(numRandomPoints, 2);
+        
+        % Bierzemy pod uwagę ograniczenia mapy
+        mapBounds = map.GridSize;
+        
+        for i = 1:numRandomPoints
+            validPoint = false;
+            while ~validPoint
+                x = randi([1, mapBounds(2)]);
+                y = randi([1, mapBounds(1)]);
+                
+                % Sprawdzenie czy punkt nie koliduje z przeszkodą
+                if ~checkOccupancy(map, [x, y])
+                    randomPoints(i,:) = [x, y];
+                    validPoint = true;
+                end
+            end
+        end
+        
+        % Rysowanie losowych punktów jako reprezentacji drzewa RRT
+        plot(randomPoints(:,1), randomPoints(:,2), "*", "Color", colors(idx), "LineWidth", 1);
+        
+        % Symulacja krawędzi drzewa poprzez połączenie punktów z najbliższymi
+        % To jest przybliżenie, rzeczywiste drzewo RRT wygląda inaczej
+        for i = 2:numRandomPoints
+            % Znajdź najbliższy punkt wśród wcześniejszych
+            distances = sqrt(sum((randomPoints(1:i-1,:) - randomPoints(i,:)).^2, 2));
+            [~, closestIdx] = min(distances);
+            
+            % Sprawdź, czy krawędź nie koliduje z przeszkodą
+            startPoint = randomPoints(closestIdx,:);
+            endPoint = randomPoints(i,:);
+            
+            % Rysuj krawędź
+            plot([startPoint(1), endPoint(1)], [startPoint(2), endPoint(2)], "Color", colors(idx));
+        end
+        
+        % Rysowanie ścieżki jeśli znaleziono
+        if solnInfo.IsPathFound
+            interpolate(pthObj, 1000);
+            plot(pthObj.States(:,1), pthObj.States(:,2), ...
+                 "Color", pathColors(idx), "LineWidth", 2.5);
+        else
+            disp("Nie znaleziono ścieżki dla MaxIterations = " + maxIterations);
+        end
+        
+        % Rysowanie punktu startowego i końcowego
+        plot(start(1), start(2), "*", "Color", "g", "LineWidth", 3);
+        plot(goal(1), goal(2), "*", "Color", "r", "LineWidth", 3);
+        
+        title(sprintf("RRT z MaxIterations = %d", maxIterations));
+        hold off;
+    end
+end

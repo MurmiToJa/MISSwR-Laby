@@ -219,7 +219,7 @@ function planPathWithPRM(map, start, goal, numNodesList, colors, pathColors)
 end
 
 %% Funkcja planowania ścieżki przy użyciu RRT
-%jeszcze do poprawy
+%jeszcze ado
 function rrtPathPlanning(numNodesList, start, goal, map, colors, pathColors)
     start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
     end_point = goal(1:2);    % Wyciągamy współrzędne punktu końcowego
