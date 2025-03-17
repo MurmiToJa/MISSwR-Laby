@@ -24,23 +24,25 @@ binMapa = mapa > 128;
 % Tworzenie mapy zajętości dla nawigacji
 mapOccupancy = binaryOccupancyMap(~binMapa);
 map = mapOccupancy;
+planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
+% Przekazujemy pełne wektory start i goal zamiast tylko punktów, plus wymiary mapy
+rrtPathPlanning(numNodesList, start, goal, mapOccupancy, colors, pathColors);
+rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
+%% Planowanie ścieżki przy użyciu RRT
+function rrtPathPlanning(map, start, goal, numNodesList, colors, pathColors)
 
-% Przekazujemy pełne wektory start i goal zamiast tylko punktów
-rrtPathPlanning([10,20,30], start, goal, map, colors, pathColors);
-
-function rrtPathPlanning(numNodesList, start, goal, map, colors, pathColors)
     start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
     end_point = goal(1:2);    % Wyciągamy współrzędne punktu końcowego
     
     for idx = 1:length(numNodesList)
         figure;
         numNodes = numNodesList(idx);
-        %% Planowanie ścieżki przy użyciu RRT
+
         ss = stateSpaceSE2;
         ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
         sv = validatorOccupancyMap(ss, Map=map);
         sv.ValidationDistance = 1;
-        planner = plannerRRT(ss, sv, MaxNumTreeNodes=numNodes, MaxConnectionDistance=100);
+        planner = plannerRRT(ss, sv, MaxNumTreeNodes=numNodes, MaxConnectionDistance=10);
         rng(100, 'twister'); % dla powtarzalnych wyników
         [pthObj, solnInfo] = plan(planner, start, goal);
         

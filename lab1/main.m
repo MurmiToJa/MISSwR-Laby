@@ -40,7 +40,7 @@ displayMap(mapOccupancy, start_point, end_point);
 planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 
 %% Planowanie ścieżki przy użyciu RRT
-rrtPathPlanning(numNodesList, start, goal, mapOccupancy, colors, pathColors);
+rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 
 %% Funkcje pomocnicze
 
@@ -220,7 +220,7 @@ end
 
 %% Funkcja planowania ścieżki przy użyciu RRT
 %jeszcze do poprawy
-function rrtPathPlanning(numNodesList, start, goal, map, colors, pathColors)
+function rrtPathPlanning(map, start, goal, numNodesList, colors, pathColors)
     start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
     end_point = goal(1:2);    % Wyciągamy współrzędne punktu końcowego
     
