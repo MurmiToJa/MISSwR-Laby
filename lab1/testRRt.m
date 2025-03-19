@@ -24,44 +24,55 @@ binMapa = mapa > 128;
 % Tworzenie mapy zajętości dla nawigacji
 mapOccupancy = binaryOccupancyMap(~binMapa);
 map = mapOccupancy;
-planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 % Przekazujemy pełne wektory start i goal zamiast tylko punktów, plus wymiary mapy
-rrtPathPlanning(numNodesList, start, goal, mapOccupancy, colors, pathColors);
 rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 %% Planowanie ścieżki przy użyciu RRT
 function rrtPathPlanning(map, start, goal, numNodesList, colors, pathColors)
-
     start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
-    end_point = goal(1:2);    % Wyciągamy współrzędne punktu końcowego
+    end_point = goal(1:2); % Wyciągamy współrzędne punktu końcowego
     
     for idx = 1:length(numNodesList)
         figure;
         numNodes = numNodesList(idx);
-
         ss = stateSpaceSE2;
         ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
         sv = validatorOccupancyMap(ss, Map=map);
-        sv.ValidationDistance = 1;
-        planner = plannerRRT(ss, sv, MaxNumTreeNodes=numNodes, MaxConnectionDistance=10);
+        sv.ValidationDistance = 0.01;
+        planner = plannerRRT(ss, sv);
+        %planner.MaxNumTreeNodes = numNodes; % Ustawienie maksymalnej liczby węzłów
+        
         rng(100, 'twister'); % dla powtarzalnych wyników
+        
+        % Mierzenie czasu planowania
+        tic;
         [pthObj, solnInfo] = plan(planner, start, goal);
+        planningTime = toc;
+        
+        % Liczba faktycznie użytych węzłów
+        actualNodes = size(solnInfo.TreeData, 1);
         
         show(map)
         hold on
+        
         % Rysowanie drzewa ekspansji
         plot(solnInfo.TreeData(:,1), solnInfo.TreeData(:,2), '.-', 'Color', colors(idx))
+        
         % Rysowanie punktu startowego i końcowego
         plot(start_point(1), start_point(2), 'go', 'MarkerSize', 10, 'LineWidth', 2)
         plot(end_point(1), end_point(2), 'ro', 'MarkerSize', 10, 'LineWidth', 2)
+        
         % Rysowanie ścieżki jeśli znaleziono
         if solnInfo.IsPathFound
-            interpolate(pthObj, 1000);
+            interpolate(pthObj, 2320);
             plot(pthObj.States(:,1), pthObj.States(:,2), ...
                 "Color", pathColors(idx), "LineWidth", 2.5);
+            titleInfo = sprintf('RRT z %d węzłami (użyto: %d, czas: %.2f s)', numNodes, actualNodes, planningTime);
         else
             disp("Nie znaleziono ścieżki dla MaxNumTreeNodes = " + numNodes);
+            titleInfo = sprintf('RRT z %d węzłami (użyto: %d, czas: %.2f s) - brak ścieżki', numNodes, actualNodes, planningTime);
         end
-        title(sprintf('RRT z %d węzłami', numNodes));
+        
+        title(titleInfo);
         hold off
     end
 end

@@ -9,7 +9,7 @@ end_point = [180, 10];
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
 block_size = 5;          % Rozmiar przeszkód
-num_obstacles = 10;       % Liczba przeszkód do wygenerowania
+num_obstacles = 5;       % Liczba przeszkód do wygenerowania
 numNodesList = [50, 100, 1000]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
@@ -40,7 +40,7 @@ displayMap(mapOccupancy, start_point, end_point);
 planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 
 %% Planowanie ścieżki przy użyciu RRT
-rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
+%rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 
 %% Funkcje pomocnicze
 
@@ -194,26 +194,33 @@ function planPathWithPRM(map, start, goal, numNodesList, colors, pathColors)
         % Rysowanie krawędzi
         for i = 1:size(edges,1)
             states = interpolate(ss, nodes(edges(i,1),:), ...
-                                 nodes(edges(i,2),:), 0:0.02:1);
+                nodes(edges(i,2),:), 0:0.02:1);
             plot(states(:,1), states(:,2), "Color", colors(idx))
         end
         
-        % Planowanie ścieżki
+        % Planowanie ścieżki i pomiar czasu
         rng(100,"twister");
+        tic; % Rozpoczęcie pomiaru czasu
         [pthObj, solnInfo] = plan(planner, start, goal);
+        planTime = toc; % Zakończenie pomiaru czasu
+        
         if solnInfo.IsPathFound
             interpolate(pthObj, 1000);
             plot(pthObj.States(:,1), pthObj.States(:,2), ...
-                 "Color", pathColors(idx), "LineWidth", 2.5);
+                "Color", pathColors(idx), "LineWidth", 2.5);
+            timeText = sprintf('Czas planowania: %.4f s', planTime);
         else
             disp("Nie znaleziono ścieżki dla MaxNumNodes = " + maxNodes);
+            timeText = sprintf('Czas planowania: %.4f s (ścieżka nie znaleziona)', planTime);
         end
         
         % Rysowanie punktu startowego i końcowego
         plot(start(1), start(2), "*", "Color", "g", "LineWidth", 3)
         plot(goal(1), goal(2), "*", "Color", "r", "LineWidth", 3)
         
-        title(sprintf("PRM z MaxNumNodes = %d", maxNodes));
+        % Dodanie czasu planowania do tytułu
+        title(sprintf("PRM z MaxNumNodes = %d\n%s", maxNodes, timeText));
+        
         hold off;
     end
 end
