@@ -4,13 +4,20 @@ clear all;
 close all;
 
 %% Parametry
-start_point = [10, 10];
-end_point = [180, 10];
+% pierwsza mapa
+% start_point = [20, 50];
+% end_point = [170, 50];
+
+%druga mapa
+start_point = [20, 20];
+end_point = [180, 180];
+
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
 block_size = 5;          % Rozmiar przeszkód
-num_obstacles = 5;       % Liczba przeszkód do wygenerowania
-numNodesList = [50, 100, 1000]; % Liczby węzłów do testowania
+num_obstacles = 0; 
+MaxConnectionDistance = [10, 12, 15];% Liczba przeszkód do wygenerowania
+numNodesList = [0,0,0]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
 
@@ -36,11 +43,12 @@ mapOccupancy = binaryOccupancyMap(~binMapa);
 % Wyświetlenie mapy z przeszkodami
 displayMap(mapOccupancy, start_point, end_point);
 
+%% Planowanie ścieżki przy użyciu RRT
+%rrtPathPlanning(mapOccupancy, start, goal, MaxConnectionDistance, colors, pathColors);
+numNodesList = rrtPathPlanning(mapOccupancy, start, goal, MaxConnectionDistance, colors, pathColors, numNodesList);
+
 %% Planowanie ścieżki przy użyciu PRM z różnymi liczbami węzłów
 planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
-
-%% Planowanie ścieżki przy użyciu RRT
-%rrtPathPlanning(mapOccupancy, start, goal, numNodesList, colors, pathColors);
 
 %% Funkcje pomocnicze
 
@@ -176,7 +184,7 @@ function planPathWithPRM(map, start, goal, numNodesList, colors, pathColors)
     
     for idx = 1:length(numNodesList)
         maxNodes = numNodesList(idx);
-        planner = plannerPRM(ss, sv, "MaxNumNodes", maxNodes);
+        planner = plannerPRM(ss, sv, "MaxNumNodes",maxNodes);
         
         % Pobranie danych grafu
         graph = graphData(planner);
@@ -227,38 +235,53 @@ end
 
 %% Funkcja planowania ścieżki przy użyciu RRT
 %jeszcze do poprawy
-function rrtPathPlanning(map, start, goal, numNodesList, colors, pathColors)
+function numNodesList = rrtPathPlanning(map, start, goal, ValidationDistance, colors, pathColors,numNodesList)
     start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
-    end_point = goal(1:2);    % Wyciągamy współrzędne punktu końcowego
+    end_point = goal(1:2); % Wyciągamy współrzędne punktu końcowego
     
-    for idx = 1:length(numNodesList)
+    for idy = 1:length(ValidationDistance)
         figure;
-        numNodes = numNodesList(idx);
-        %% Planowanie ścieżki przy użyciu RRT
+        sv.ValidationDistance = ValidationDistance(idy);
         ss = stateSpaceSE2;
+        %MaxConnectionDistance
+        Validation_Distance = sv.ValidationDistance;
         ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
         sv = validatorOccupancyMap(ss, Map=map);
-        sv.ValidationDistance = 1;
-        planner = plannerRRT(ss, sv, MaxNumTreeNodes=numNodes, MaxConnectionDistance=100);
-        rng(100, 'twister'); % dla powtarzalnych wyników
-        [pthObj, solnInfo] = plan(planner, start, goal);
+        planner = plannerRRT(ss, sv, "MaxConnectionDistance",Validation_Distance);
+        %planner.MaxNumTreeNodes = numNodes; % Ustawienie maksymalnej liczby węzłów
         
+        rng(100, 'twister'); % dla powtarzalnych wyników
+        
+        % Mierzenie czasu planowania
+        tic;
+        [pthObj, solnInfo] = plan(planner, start, goal);
+        planningTime = toc;
+        
+        % Liczba faktycznie użytych węzłów
+        actualNodes = size(solnInfo.TreeData, 1);
+        numNodesList(idy) = actualNodes;
+
         show(map)
         hold on
+        
         % Rysowanie drzewa ekspansji
-        plot(solnInfo.TreeData(:,1), solnInfo.TreeData(:,2), '.-', 'Color', colors(idx))
+        plot(solnInfo.TreeData(:,1), solnInfo.TreeData(:,2), '.-', 'Color', colors(idy))
+        
         % Rysowanie punktu startowego i końcowego
         plot(start_point(1), start_point(2), 'go', 'MarkerSize', 10, 'LineWidth', 2)
         plot(end_point(1), end_point(2), 'ro', 'MarkerSize', 10, 'LineWidth', 2)
+        
         % Rysowanie ścieżki jeśli znaleziono
         if solnInfo.IsPathFound
-            interpolate(pthObj, 1000);
+            interpolate(pthObj, 2320);
             plot(pthObj.States(:,1), pthObj.States(:,2), ...
-                "Color", pathColors(idx), "LineWidth", 2.5);
+                "Color", pathColors(idy), "LineWidth", 2.5);
+            titleInfo = sprintf('RRT z ValidationDistance = %d  (użyto węzłów: %d, czas: %.2f s)', ValidationDistance(idy), actualNodes, planningTime);
         else
-            disp("Nie znaleziono ścieżki dla MaxNumTreeNodes = " + numNodes);
+            disp("Nie znaleziono ścieżki dla ValidationDistance = " + ValidationDistance(idy));
+            titleInfo = sprintf('RRT brak ścieżki');
         end
-        title(sprintf('RRT z %d węzłami', numNodes));
+        title(titleInfo);
         hold off
     end
 end
