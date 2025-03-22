@@ -9,20 +9,25 @@ close all;
 % end_point = [170, 50];
 
 %druga mapa
-start_point = [20, 20];
-end_point = [180, 180];
+% start_point = [20, 20];
+% end_point = [180, 180];
+
+%trzecia mapa
+start_point = [30, 30];
+end_point = [750, 550];
+
 
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
 block_size = 5;          % Rozmiar przeszkód
-num_obstacles = 0; 
-MaxConnectionDistance = [10, 12, 15];% Liczba przeszkód do wygenerowania
+num_obstacles = 0;       % Liczba przeszkód do wygenerowania
+MaxConnectionDistance = 15;
 numNodesList = [0,0,0]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
 
 %% Wczytanie i przetworzenie mapy
-mapa = imread('mapa2.jpg');
+mapa = imread('mapa3.jpg');
 if size(mapa, 3) > 1
     mapa = rgb2gray(mapa);
 end
