@@ -1,0 +1,9 @@
+https://www.google.com/maps/place/aleja+Solidarno%C5%9Bci,+21-500+Bia%C5%82a+Podlaska/@52.0395292,23.1866634,236m/data=!3m1!1e3!4m6!3m5!1s0x472190b5a8a589e7:0xb039e7b56b491559!8m2!3d52.0304673!4d23.1875581!16s%2Fg%2F1v2kw5zl!5m2!1e1!1e4?hl=pl-PL&entry=ttu&g_ep=EgoyMDI1MDMxOS4yIKXMDSoASAFQAw%3D%3D
+aleja Solidarności
+21-500 Biała Podlaska
+
+52.04053340741444, 23.185485257607066
+
+52.03895169208134, 23.187293077980275
+
+https://www.openstreetmap.org/export#map=19/52.039744/23.187557
