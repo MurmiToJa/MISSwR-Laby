@@ -1,6 +1,6 @@
 clear all;
 %% Inicjalizacja scenariusza
-scenario = robotScenario(UpdateRate=5);
+scenario = robotScenario(UpdateRate=10);
 
 % Kolor podłoża
 floorColor = [0.5882 0.2941 0];
@@ -69,19 +69,18 @@ platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
 
 %% Sensor LIDAR - zaktualizowana konfiguracja 3D
 lidarModel = robotLidarPointCloudGenerator(...
-    UpdateRate=5, ...
-    MaxRange=5, ...
-    RangeAccuracy=0.0020, ...
-    AzimuthResolution=0.1600, ...
-    ElevationResolution=1.250, ...
+    UpdateRate=10, ...
+    MaxRange=300, ...
+    RangeAccuracy=0.20, ...
+    AzimuthResolution=0.16, ...
+    ElevationResolution=1.25, ...
     AzimuthLimits=[-180 180], ... % 180° w poziomie
-    ElevationLimits=[0 30], ...  % Skanowanie w zakresie -15° do +15° w pionie
+    ElevationLimits=[-15 15], ...  % Skanowanie w zakresie -15° do +15° w pionie
     HasNoise=false, ...
-    HasOrganizedOutput=false);
-
+    HasOrganizedOutput=true);
 
 lidar = robotSensor("lidar", platform, lidarModel, ...
-    MountingLocation=[0 0 0.5]);
+    MountingLocation=[0 0 0.3],MountingAngles=[0 0 0], UpdateRate=10);
 
 %% Uruchomienie symulacji
 
@@ -116,10 +115,10 @@ while advance(scenario)
     
     % Odczyt danych z LIDAR-a
     [~, ~, currentPC] = read(lidar);
-    
+        
     % Odczyt aktualnej pozycji robota
     currentPose = read(platform);
-    
+     updateSensors(scenario);
     if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
         disp("Valid LIDAR data found at time: " + scenario.CurrentTime);
         
@@ -129,6 +128,21 @@ while advance(scenario)
         % Projekcja chmury punktów 3D na 2D dla SLAM
         pcLocs = currentPC.Location;
         xyPoints = pcLocs(:, 1:2);
+        xyzPoints = pcLocs;
+
+
+        tform = rigid3d(eul2rotm(currentPose(4:6)), currentPose(1:3));
+        globalPC = pctransform(currentPC, tform);
+
+        if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
+    % Wyświetl aktualną pozycję LIDARa
+    figure(2);
+    pcshow(currentPC);
+    title(['LIDAR data at time: ' num2str(scenario.CurrentTime)]);
+    xlabel('X [m]'); ylabel('Y [m]'); zlabel('Z [m]');
+    drawnow;
+        end
+
         
         % Konwersja na obiekt lidarScan wymagany przez algorytm SLAM
         ranges = sqrt(sum(xyPoints.^2, 2));
@@ -158,7 +172,7 @@ while advance(scenario)
     if any(isnan(currentPose)) && robotStartMoving
         break;
     end
-       updateSensors(scenario);
+
 end
 
 disp("Symulacja zakończona. Przetwarzam dane SLAM...");
@@ -188,4 +202,6 @@ view(3); % Widok 3D
 hold off;
 %Opcjonalnie możesz dostosować oświetlenie
 lighting gouraud;
+
+%% 
 

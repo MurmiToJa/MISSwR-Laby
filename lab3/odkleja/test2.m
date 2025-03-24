@@ -1,6 +1,6 @@
 clear all;
 %% Inicjalizacja scenariusza
-scenario = robotScenario(UpdateRate=100);
+scenario = robotScenario(UpdateRate=10);
 
 % Kolor podłoża
 floorColor = [0.5882 0.2941 0];
@@ -43,83 +43,48 @@ map = binaryOccupancyMap(scenario, GridOriginInLocal=[-2 -2], ...
 inflate(map,0.3);
 show(map);
 
-%% Definicja własnych punktów trasy
-% Punkty trasy zgodnie z żądaniem: 1,1 -> 9,1 -> 9,4 -> 5,4 -> 4,0 -> 4,5 -> 1,5 -> 1,9 -> 9,9 -> 6,9 -> 6,6
-baseWaypoints = [
-    1, 1;
-    9, 1;
-    9, 4;
-    6, 4;
-    4, 2;
-    4, 5;
-    1, 5;
-    1, 9;
-    9, 9;
-    9, 6;
-    6, 6
-];
+%% Planowanie trasy
+startPosition = [1 1];
+goalPosition = [8 8];
 
-% Generowanie dodatkowych punktów pośrednich dla ruchu po liniach prostych
-customWaypoints = [];
-numPointsPerSegment = 2;  % Liczba punktów pośrednich na segment
-
-for i = 1:size(baseWaypoints, 1)-1
-    p1 = baseWaypoints(i, :);
-    p2 = baseWaypoints(i+1, :);
-    
-    % Generuj punkty pośrednie na prostej między p1 i p2
-    for j = 0:numPointsPerSegment
-        t = j / numPointsPerSegment;
-        intermediatePoint = p1 * (1-t) + p2 * t;
-        customWaypoints = [customWaypoints; intermediatePoint];
-    end
-end
-
-% Dodanie ostatniego punktu
-customWaypoints = [customWaypoints; baseWaypoints(end, :)];
-
-% Sprawdzenie czy punkty są poza przeszkodami
-for i = 1:size(customWaypoints, 1)
-    x = customWaypoints(i, 1);
-    y = customWaypoints(i, 2);
-    if getOccupancy(map, [x, y]) > 0.5
-        warning('Punkt [%d, %d] koliduje z przeszkodą!', x, y);
-    end
-end
+numnodes = 2000;
+planner = mobileRobotPRM(map, numnodes);
+planner.ConnectionDistance = 1;
+waypoints = findpath(planner, startPosition, goalPosition);
 
 %% Robot
 robotheight = 0.12;
-numWaypoints = size(customWaypoints, 1);
+numWaypoints = size(waypoints,1);
 firstInTime = 0;
 lastInTime = firstInTime + (numWaypoints-1);
 
-% Definiujemy czasy przybycia dla każdego punktu - równomierne rozłożenie w czasie
-timeOfArrival = linspace(firstInTime, lastInTime, numWaypoints);
-
-% Używamy waypointTrajectory bez opcji Orientation
-traj = waypointTrajectory(SampleRate=20, ...
-    TimeOfArrival=timeOfArrival, ...
-    Waypoints=[customWaypoints, robotheight*ones(numWaypoints,1)], ...
+traj = waypointTrajectory(SampleRate=5, ...
+    TimeOfArrival=firstInTime:lastInTime, ...
+    Waypoints=[waypoints, robotheight*ones(numWaypoints,1)], ...
     ReferenceFrame="ENU");
 
 huskyRobot = loadrobot("clearpathHusky");
 platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
     BaseTrajectory=traj);
 
+%% SENSOR INS
+insModel = insSensor;
+
 %% Sensor LIDAR - zaktualizowana konfiguracja 3D
 lidarModel = robotLidarPointCloudGenerator(...
-    UpdateRate=100, ...
-    MaxRange=12, ...
-    RangeAccuracy=0.01, ...
-    AzimuthResolution=0.05, ...
-    ElevationResolution=0.05, ...
-    AzimuthLimits=[-90 90], ... % 180° w poziomie
+    UpdateRate=10, ...
+    MaxRange=300, ...
+    RangeAccuracy=0.20, ...
+    AzimuthResolution=0.16, ...
+    ElevationResolution=1.25, ...
+    AzimuthLimits=[-180 180], ... % 180° w poziomie
     ElevationLimits=[0 15], ...  % Skanowanie w zakresie -15° do +15° w pionie
     HasNoise=false, ...
-    HasOrganizedOutput=false);
+    HasOrganizedOutput=true);
 
 lidar = robotSensor("lidar", platform, lidarModel, ...
-    MountingLocation=[0 0 0.5]);
+    MountingLocation=[0 0 0.3], MountingAngles=[0 0 0], UpdateRate=10);
+ins = robotSensor("ins", platform, insModel);
 
 %% Uruchomienie symulacji
 
@@ -132,18 +97,11 @@ figure('Name', 'Robot Simulation', 'NumberTitle', 'off');
 lightangle(-45,30);
 view(60,60);
 hold(ax, "on");
-
-% Narysowanie oryginalnych punktów bazowych
-plot(ax, baseWaypoints(:,1), baseWaypoints(:,2), "-ms", ...
+plot(ax, waypoints(:,1), waypoints(:,2), "-ms", ...
     LineWidth=2, ...
-    MarkerSize=8, ...
+    MarkerSize=4, ...
     MarkerEdgeColor="b", ...
     MarkerFaceColor=[0.5 0.5 0.5]);
-
-% Narysowanie linii prostych między punktami (bez punktów pośrednich)
-plot(ax, customWaypoints(:,1), customWaypoints(:,2), "--r", ...
-    LineWidth=1);
-
 hold(ax, "off");
 
 r = rateControl(20);
@@ -151,44 +109,45 @@ robotStartMoving = false;
 
 % Tablice do przechowywania danych
 robotPoses = [];
-scanBuffer = cell(0);      % Przechowuje chmury punktów 3D
-lidarScans = cell(0);      % Przechowuje skany 2D dla SLAM
+globalPointCloud = pointCloud(zeros(0,3)); % Inicjalizacja pustej chmury punktów
 timestamps = [];           % Przechowuje czasy dla każdego skanu
-
 disp("Rozpoczynam symulację...");
 
 while advance(scenario)
-    
-    % Odczyt danych z LIDAR-a
+    % Odczyt danych z LIDAR-a i INS
     [~, ~, currentPC] = read(lidar);
-    
-    % Odczyt aktualnej pozycji robota
+    [~, ~, insData] = read(ins);
     currentPose = read(platform);
+    updateSensors(scenario);
     
     if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
         disp("Valid LIDAR data found at time: " + scenario.CurrentTime);
         
-        % Zapisz chmurę punktów 3D
-        scanBuffer{end+1} = currentPC;
+        % 1️⃣ Pobranie surowej chmury punktów LIDAR-a (pominięcie NaN)
+        xyzPoints = reshape(currentPC.Location, [], 3);
+        validPoints = ~any(isnan(xyzPoints), 2);
+        xyzPoints = xyzPoints(validPoints, :);
         
-        % Projekcja chmury punktów 3D na 2D dla SLAM
-        pcLocs = currentPC.Location;
-        xyPoints = pcLocs(:, 1:2);
+        % 2️⃣ Offset LIDAR-a (jest wyżej niż środek robota)
+        lidarOffset = [0 0 0.3];
+        xyzPoints = xyzPoints - lidarOffset;
         
-        % Konwersja na obiekt lidarScan wymagany przez algorytm SLAM
-        ranges = sqrt(sum(xyPoints.^2, 2));
-        angles = atan2(xyPoints(:,2), xyPoints(:,1));
+        % 3️⃣ Macierz rotacji z INS (kwaternion → macierz obrotu)
+        rotMatrix = quat2rotm(insData.Orientation);
         
-        % Sortowanie po kątach (wymagane dla lidarScan)
-        [angles, idx] = sort(angles);
-        ranges = ranges(idx);
+        % 4️⃣ Obrót punktów do układu globalnego
+        rotatedPoints = (rotMatrix * xyzPoints')';
         
-        % Tworzenie obiektu lidarScan
-        scan = lidarScan(ranges, angles);
+        % 5️⃣ Przesunięcie do globalnej pozycji robota
+        robotPosition = currentPose(1:3);
+        transformedPoints = rotatedPoints - robotPosition;
+
         
-        % Zapisz skan 2D, pozycję robota i czas
-        lidarScans{end+1} = scan;
-        robotPoses = [robotPoses; currentPose(1:3)]; % Zapisujemy x, y, i orientację
+        % 6️⃣ Dodanie do globalnej chmury punktów
+        globalPointCloud = pointCloud([globalPointCloud.Location; transformedPoints]);
+        
+        % Zapisanie pozycji robota
+        robotPoses = [robotPoses; currentPose(1:3)];
         timestamps = [timestamps; scenario.CurrentTime];
     end
     
@@ -200,19 +159,43 @@ while advance(scenario)
         robotStartMoving = true;
     end
     
-    % Sprawdzenie czy robot ukończył trasę lub wystąpił błąd
-    if (robotStartMoving && any(isnan(currentPose))) || scenario.CurrentTime > lastInTime + 5
-        disp("Symulacja zakończona. Robot ukończył trasę lub wystąpił błąd.");
+    if any(isnan(currentPose)) && robotStartMoving
         break;
     end
-    
-    updateSensors(scenario);
 end
 
-disp("Symulacja zakończona. Przetwarzam dane SLAM...");
+disp("Symulacja zakończona. Przetwarzam dane...");
 
-%% Wizualizacja wyników
+%% Wizualizacja wynikowej chmury punktów
+figure;
+pcshow(globalPointCloud);
+title('Globalna chmura punktów po transformacji');
+xlabel('X [m]');
+ylabel('Y [m]');
+zlabel('Z [m]');
+grid on;
 
-% Wizualizacja chmury punktów, jeśli są dostępne
-        pcshow(pcLocs, 'blue');
-        
+%% 
+% % Wyświetlenie wartości orientacji
+% disp('Orientacja:');
+% disp(insData.Orientation);
+% 
+% % Sprawdzenie, czy zmienna jest kwaternionem
+% if isa(insData.Orientation, 'quaternion')
+%     % Konwersja kwaternionu na macierz obrotu
+%     rotMat = quat2rotm(insData.Orientation);
+%     disp('Macierz obrotu:');
+%     disp(rotMat);
+% 
+%     % Konwersja kwaternionu na kąty Eulera (w radianach, ewentualnie przelicz na stopnie)
+%     eul = quat2eul(insData.Orientation);
+%     disp('Kąty Eulera [roll, pitch, yaw] (w radianach):');
+%     disp(eul);
+% 
+%     % Jeśli potrzebujesz stopni, możesz przeliczyć:
+%     eulDeg = rad2deg(eul);
+%     disp('Kąty Eulera [roll, pitch, yaw] (w stopniach):');
+%     disp(eulDeg);
+% else
+%     disp('Orientacja nie jest obiektem typu quaternion.');
+% end
