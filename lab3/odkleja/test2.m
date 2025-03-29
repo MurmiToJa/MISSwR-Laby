@@ -68,7 +68,7 @@ platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
     BaseTrajectory=traj);
 
 %% SENSOR INS
-insModel = insSensor;
+insModel = insSensor(YawAccuracy=0.1);
 
 %% Sensor LIDAR - zaktualizowana konfiguracja 3D
 lidarModel = robotLidarPointCloudGenerator(...
@@ -113,42 +113,73 @@ globalPointCloud = pointCloud(zeros(0,3)); % Inicjalizacja pustej chmury punktó
 timestamps = [];           % Przechowuje czasy dla każdego skanu
 disp("Rozpoczynam symulację...");
 
+%ins: pozyje yxz
+
+% Ustal początkową pozycję robota (na początku symulacji)
+initialPosition = [];
+
 while advance(scenario)
     % Odczyt danych z LIDAR-a i INS
     [~, ~, currentPC] = read(lidar);
     [~, ~, insData] = read(ins);
     currentPose = read(platform);
-    updateSensors(scenario);
+    postition = insData.Position;
+
     
     if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
         disp("Valid LIDAR data found at time: " + scenario.CurrentTime);
         
-        % 1️⃣ Pobranie surowej chmury punktów LIDAR-a (pominięcie NaN)
+        % Zapisz początkową pozycję robota, jeśli jeszcze nie jest ustawiona
+        if isempty(initialPosition)
+            initialPosition = currentPose(1:3);
+        end
+        disp(insData.Position);
+        % 1. Pobranie surowej chmury punktów LIDAR-a (pominięcie NaN)
         xyzPoints = reshape(currentPC.Location, [], 3);
         validPoints = ~any(isnan(xyzPoints), 2);
         xyzPoints = xyzPoints(validPoints, :);
         
-        % 2️⃣ Offset LIDAR-a (jest wyżej niż środek robota)
+        % 2. Uwzględnienie offsetu LIDAR-a
         lidarOffset = [0 0 0.3];
         xyzPoints = xyzPoints - lidarOffset;
         
-        % 3️⃣ Macierz rotacji z INS (kwaternion → macierz obrotu)
-        rotMatrix = quat2rotm(insData.Orientation);
+        % 3. Pobierz kąt yaw
+        eul = quat2eul(insData.Orientation, 'ZYX');
+        yaw = eul(1);
+        %yaw = rad2deg(yaw);
         
-        % 4️⃣ Obrót punktów do układu globalnego
-        rotatedPoints = (rotMatrix * xyzPoints')';
+        % 4. Najprostsze podejście - osobno rotacja, osobno translacja
+        % Macierz obrotu wokół Z
+        Rz = [cos(yaw), -sin(yaw), 0;
+              sin(yaw), cos(yaw),  0;
+              0,        0,         1];
         
-        % 5️⃣ Przesunięcie do globalnej pozycji robota
-        robotPosition = currentPose(1:3);
-        transformedPoints = rotatedPoints - robotPosition;
+        % Najpierw obrót punktów
+        rotatedPoints = (Rz * xyzPoints')';
+        
+        % Potem translacja (przesunięcie)
+        % Dodaj aktualną pozycję robota względem początku
+        translatedPoints = rotatedPoints;
+        translatedPoints(:,1) = translatedPoints(:,1);%+currentPose(2)-initialPosition(1);
+        translatedPoints(:,2) = translatedPoints(:,2);%+currentPose(1)-initialPosition(2);
+        translatedPoints(:,3) = translatedPoints(:,3);
+        
+        % Dodanie do globalnej chmury punktów
+        globalPointCloud = pointCloud([globalPointCloud.Location; translatedPoints]);
+        
+                %if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
+                % Wyświetl aktualną pozycję LIDARa
+                % figure(2);
+                % pcshow(currentPC);
+                % title(['LIDAR data at time: ' num2str(scenario.CurrentTime)]);
+                % xlabel('X [m]'); ylabel('Y [m]'); zlabel('Z [m]');
+                % drawnow;
+                % %end
 
-        
-        % 6️⃣ Dodanie do globalnej chmury punktów
-        globalPointCloud = pointCloud([globalPointCloud.Location; transformedPoints]);
-        
         % Zapisanie pozycji robota
-        robotPoses = [robotPoses; currentPose(1:3)];
+        robotPoses = [robotPoses; currentPose(1:3) - initialPosition];
         timestamps = [timestamps; scenario.CurrentTime];
+        
     end
     
     % Aktualizacja wizualizacji 3D
@@ -162,10 +193,12 @@ while advance(scenario)
     if any(isnan(currentPose)) && robotStartMoving
         break;
     end
+
+    updateSensors(scenario);
+    advance(scenario);
 end
 
 disp("Symulacja zakończona. Przetwarzam dane...");
-
 %% Wizualizacja wynikowej chmury punktów
 figure;
 pcshow(globalPointCloud);
@@ -176,6 +209,7 @@ zlabel('Z [m]');
 grid on;
 
 %% 
+%pcshow(currentPC)
 % % Wyświetlenie wartości orientacji
 % disp('Orientacja:');
 % disp(insData.Orientation);

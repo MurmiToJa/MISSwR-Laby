@@ -1,6 +1,6 @@
 clear all;
 %% Inicjalizacja scenariusza
-scenario = robotScenario(UpdateRate=10);
+scenario = robotScenario(UpdateRate=100);
 
 % Kolor podłoża
 floorColor = [0.5882 0.2941 0];
@@ -47,7 +47,7 @@ show(map);
 startPosition = [1 1];
 goalPosition = [8 8];
 
-numnodes = 2000;
+numnodes = 500;
 planner = mobileRobotPRM(map, numnodes);
 planner.ConnectionDistance = 1;
 waypoints = findpath(planner, startPosition, goalPosition);
@@ -58,7 +58,7 @@ numWaypoints = size(waypoints,1);
 firstInTime = 0;
 lastInTime = firstInTime + (numWaypoints-1);
 
-traj = waypointTrajectory(SampleRate=5, ...
+traj = waypointTrajectory(SampleRate=100, ...
     TimeOfArrival=firstInTime:lastInTime, ...
     Waypoints=[waypoints, robotheight*ones(numWaypoints,1)], ...
     ReferenceFrame="ENU");
@@ -67,21 +67,23 @@ huskyRobot = loadrobot("clearpathHusky");
 platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
     BaseTrajectory=traj);
 
+%% SENSOR INS
+insModel = insSensor(YawAccuracy=10,PitchAccuracy=10,RollAccuracy=10,HasGNSSFix=true);
+
 %% Sensor LIDAR - zaktualizowana konfiguracja 3D
 lidarModel = robotLidarPointCloudGenerator(...
-    UpdateRate=10, ...
-    MaxRange=300, ...
+    UpdateRate=100, ...
+    MaxRange=5, ...
     RangeAccuracy=0.20, ...
     AzimuthResolution=0.16, ...
     ElevationResolution=1.25, ...
     AzimuthLimits=[-180 180], ... % 180° w poziomie
-    ElevationLimits=[-15 15], ...  % Skanowanie w zakresie -15° do +15° w pionie
+    ElevationLimits=[0 10], ...  % Skanowanie w zakresie -15° do +15° w pionie
     HasNoise=false, ...
     HasOrganizedOutput=true);
 
 lidar = robotSensor("lidar", platform, lidarModel, ...
-    MountingLocation=[0 0 0.3],MountingAngles=[0 0 0], UpdateRate=10);
-
+    MountingLocation=[0 0 0.3], MountingAngles=[0 0 0], UpdateRate=100);
 %% Uruchomienie symulacji
 
 % Ustawienie scenariusza
@@ -105,63 +107,75 @@ robotStartMoving = false;
 
 % Tablice do przechowywania danych
 robotPoses = [];
-scanBuffer = cell(0);      % Przechowuje chmury punktów 3D
-lidarScans = cell(0);      % Przechowuje skany 2D dla SLAM
+globalPointCloud = pointCloud(zeros(0,3)); % Inicjalizacja pustej chmury punktów
 timestamps = [];           % Przechowuje czasy dla każdego skanu
-
 disp("Rozpoczynam symulację...");
 
+%ins: pozyje yxz
+
+% Ustal początkową pozycję robota (na początku symulacji)
+initialPosition = [];
+
+
+%% Pętla główna
 while advance(scenario)
-    
-    % Odczyt danych z LIDAR-a
+    % Odczyt danych z LIDAR-a i INS
     [~, ~, currentPC] = read(lidar);
-        
-    % Odczyt aktualnej pozycji robota
     currentPose = read(platform);
-     updateSensors(scenario);
+    updateSensors(scenario);
+    advance(scenario);
+    
+    % Debugging and robustness modifications
     if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
-        disp("Valid LIDAR data found at time: " + scenario.CurrentTime);
+        % Extract position and quaternion from currentPose
+        position = currentPose(1:3);         % [x y z]
+        quaternion = currentPose(10:13);     % [qw qx qy qz]
         
-        % Zapisz chmurę punktów 3D
-        scanBuffer{end+1} = currentPC;
+        % Optional: Display position and quaternion for debugging
+        fprintf('Position (x,y,z): [%.3f, %.3f, %.3f]\n', position(1), position(2), position(3));
+        fprintf('Quaternion (w,x,y,z): [%.3f, %.3f, %.3f, %.3f]\n', quaternion(1), quaternion(2), quaternion(3), quaternion(4));
         
-        % Projekcja chmury punktów 3D na 2D dla SLAM
-        pcLocs = currentPC.Location;
-        xyPoints = pcLocs(:, 1:2);
-        xyzPoints = pcLocs;
-
-
-        tform = rigid3d(eul2rotm(currentPose(4:6)), currentPose(1:3));
-        globalPC = pctransform(currentPC, tform);
-
-        if ~isempty(currentPC) && ~all(isnan(currentPC.Location(:))) && ~any(isnan(currentPose))
-    % Wyświetl aktualną pozycję LIDARa
-    figure(2);
-    pcshow(currentPC);
-    title(['LIDAR data at time: ' num2str(scenario.CurrentTime)]);
-    xlabel('X [m]'); ylabel('Y [m]'); zlabel('Z [m]');
-    drawnow;
+        % Initialize initial position if needed
+        if isempty(initialPosition)
+            initialPosition = position;
         end
-
         
-        % Konwersja na obiekt lidarScan wymagany przez algorytm SLAM
-        ranges = sqrt(sum(xyPoints.^2, 2));
-        angles = atan2(xyPoints(:,2), xyPoints(:,1));
+        % 1. Get raw LIDAR point cloud (skip NaN)
+        xyzPoints = reshape(currentPC.Location, [], 3);
+        validPoints = ~any(isnan(xyzPoints), 2);
+        xyzPoints = xyzPoints(validPoints, :);
         
-        % Sortowanie po kątach (wymagane dla lidarScan)
-        [angles, idx] = sort(angles);
-        ranges = ranges(idx);
+        % 2. Account for LIDAR offset
+        lidarOffset = [0 0 0.3];
+        xyzPoints = xyzPoints + lidarOffset;
         
-        % Tworzenie obiektu lidarScan
-        scan = lidarScan(ranges, angles);
-        
-        % Zapisz skan 2D, pozycję robota i czas
-        lidarScans{end+1} = scan;
-        robotPoses = [robotPoses; currentPose(1:3)]; % Zapisujemy x, y, i orientację
-        timestamps = [timestamps; scenario.CurrentTime];
+        try
+    % Konwersja quaternionu na macierz rotacji
+    R = quat2rotm(quaternion);
+    
+    % Utworzenie macierzy transformacji dla rotacji i translacji
+    rotTform = rotm2tform(R);
+    transTform = trvec2tform(position);
+    
+    % Połączenie transformacji (rotacja, następnie translacja)
+    tform = transTform * rotTform;
+    
+    % Transformacja punktów
+    transformedPoints = zeros(size(xyzPoints));
+    for i = 1:size(xyzPoints, 1)
+        homogeneousPoint = [xyzPoints(i,:), 1]';
+        transformedHomogeneous = tform * homogeneousPoint;
+        transformedPoints(i,:) = transformedHomogeneous(1:3)';
     end
     
-    % Aktualizacja wizualizacji 3D
+    globalPointCloud = pointCloud([globalPointCloud.Location; transformedPoints]);
+catch ME
+    disp('Error in transformation:');
+    disp(ME.message);
+end
+    end
+    
+    % Update 3D visualization
     show3D(scenario, Parent=ax, FastUpdate=true);
     waitfor(r);
     
@@ -172,36 +186,18 @@ while advance(scenario)
     if any(isnan(currentPose)) && robotStartMoving
         break;
     end
-
 end
 
-disp("Symulacja zakończona. Przetwarzam dane SLAM...");
+disp("Symulacja zakończona. Przetwarzam dane...");
 
-% %% Wykresiki
+%% Wizualizacja wynikowej chmury punktów
 figure;
-
-% Wyświetl pierwszą chmurę punktów w kolorze niebieskim
-pc1 = pcshow(pcLocs, 'blue');
-hold on;
-
-% Wyświetl drugą chmurę punktów (robotPoses) w kolorze czerwonym
-%pc2 = pcshow(robotPoses, 'redv');
-
-% Dodaj tytuł i legendę
-title('Wizualizacja chmury punktów i trajektorii robota');
-
-% Dodaj etykiety osi
+pcshow(globalPointCloud);
+title('Globalna chmura punktów po transformacji');
 xlabel('X [m]');
 ylabel('Y [m]');
 zlabel('Z [m]');
-
-% Dostosuj widok
 grid on;
-axis equal;
-view(3); % Widok 3D
-hold off;
-%Opcjonalnie możesz dostosować oświetlenie
-lighting gouraud;
 
-%% 
+%% slam
 
