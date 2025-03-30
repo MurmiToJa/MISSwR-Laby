@@ -5,29 +5,31 @@ close all;
 
 %% Parametry
 % pierwsza mapa
-% start_point = [20, 50];
-% end_point = [170, 50];
+% start_point = [3, 13];
+% end_point = [13, 3];
+% MaxConnectionDistance = [0.5,1];
 
 %druga mapa
-% start_point = [20, 20];
-% end_point = [180, 180];
+start_point = [3, 13];
+end_point = [13, 3];
+MaxConnectionDistance = [1,2,3];
 
 %trzecia mapa
-start_point = [30, 30];
-end_point = [750, 550];
+
 
 
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
 block_size = 5;          % Rozmiar przeszkód
 num_obstacles = 0;       % Liczba przeszkód do wygenerowania
-MaxConnectionDistance = 15;
-numNodesList = [0,0,0]; % Liczby węzłów do testowania
+numNodesList = [0,0]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
 
 %% Wczytanie i przetworzenie mapy
-mapa = imread('mapa3.jpg');
+% mapa = imread('mapa1.jpg');
+mapa = imread('mapa2.jpg');
+% mapa = imread('mapa3.jpg');
 if size(mapa, 3) > 1
     mapa = rgb2gray(mapa);
 end
@@ -51,6 +53,7 @@ displayMap(mapOccupancy, start_point, end_point);
 %% Planowanie ścieżki przy użyciu RRT
 %rrtPathPlanning(mapOccupancy, start, goal, MaxConnectionDistance, colors, pathColors);
 numNodesList = rrtPathPlanning(mapOccupancy, start, goal, MaxConnectionDistance, colors, pathColors, numNodesList);
+disp(numNodesList);
 
 %% Planowanie ścieżki przy użyciu PRM z różnymi liczbami węzłów
 planPathWithPRM(mapOccupancy, start, goal, numNodesList, colors, pathColors);
@@ -189,6 +192,7 @@ function planPathWithPRM(map, start, goal, numNodesList, colors, pathColors)
     
     for idx = 1:length(numNodesList)
         maxNodes = numNodesList(idx);
+        disp(maxNodes);
         planner = plannerPRM(ss, sv, "MaxNumNodes",maxNodes);
         
         % Pobranie danych grafu
@@ -241,18 +245,26 @@ end
 %% Funkcja planowania ścieżki przy użyciu RRT
 %jeszcze do poprawy
 function numNodesList = rrtPathPlanning(map, start, goal, ValidationDistance, colors, pathColors,numNodesList)
-    start_point = start(1:2); % Wyciągamy współrzędne punktu startowego
-    end_point = goal(1:2); % Wyciągamy współrzędne punktu końcowego
+    start_point = start(1:2);
+    end_point = goal(1:2);
     
     for idy = 1:length(ValidationDistance)
         figure;
-        sv.ValidationDistance = ValidationDistance(idy);
         ss = stateSpaceSE2;
-        %MaxConnectionDistance
-        Validation_Distance = sv.ValidationDistance;
         ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
         sv = validatorOccupancyMap(ss, Map=map);
-        planner = plannerRRT(ss, sv, "MaxConnectionDistance",Validation_Distance);
+        sv.ValidationDistance = 0.1;
+        Max_Validation_Distance = ValidationDistance(idy);
+
+        % figure;
+        % sv.ValidationDistance = ValidationDistance(idy);
+        % ss = stateSpaceSE2;
+        % %MaxConnectionDistance
+        % Validation_Distance = sv.ValidationDistance;
+        % 
+        % ss.StateBounds = [map.XWorldLimits; map.YWorldLimits; [-pi pi]];
+        % sv = validatorOccupancyMap(ss, Map=map);
+        planner = plannerRRT(ss, sv, "MaxConnectionDistance",Max_Validation_Distance);
         %planner.MaxNumTreeNodes = numNodes; % Ustawienie maksymalnej liczby węzłów
         
         rng(100, 'twister'); % dla powtarzalnych wyników

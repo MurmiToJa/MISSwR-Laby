@@ -22,15 +22,15 @@ addMesh(scenario, "Box", Position=[wallLength/2, wallLength-wallWidth/2, wallHei
 addMesh(scenario, "Box", Position=[wallLength/2, wallWidth/2, wallHeight/2], ...
     Size=[wallLength, wallWidth, wallHeight], Color=wallColor, IsBinaryOccupied=true);
 
-% Dodanie wewnętrznych ścian
-addMesh(scenario, "Box", Position=[wallLength/8, wallLength/3, wallHeight/2], ...
-    Size=[wallLength/4, wallWidth, wallHeight], Color=wallColor, IsBinaryOccupied=true);
-addMesh(scenario, "Box", Position=[wallLength/4, wallLength/3, wallHeight/2], ...
-    Size=[wallWidth, wallLength/6, wallHeight], Color=wallColor, IsBinaryOccupied=true);
-addMesh(scenario, "Box", Position=[(wallLength-wallLength/4), wallLength/2, wallHeight/2], ...
-    Size=[wallLength/2, wallWidth, wallHeight], Color=wallColor, IsBinaryOccupied=true);
-addMesh(scenario, "Box", Position=[wallLength/2, wallLength/2, wallHeight/2], ...
-    Size=[wallWidth, wallLength/3, wallHeight], Color=wallColor, IsBinaryOccupied=true);
+% % Dodanie wewnętrznych ścian
+% addMesh(scenario, "Box", Position=[wallLength/8, wallLength/3, wallHeight/2], ...
+%     Size=[wallLength/4, wallWidth, wallHeight], Color=wallColor, IsBinaryOccupied=true);
+% addMesh(scenario, "Box", Position=[wallLength/4, wallLength/3, wallHeight/2], ...
+%     Size=[wallWidth, wallLength/6, wallHeight], Color=wallColor, IsBinaryOccupied=true);
+% addMesh(scenario, "Box", Position=[(wallLength-wallLength/4), wallLength/2, wallHeight/2], ...
+%     Size=[wallLength/2, wallWidth, wallHeight], Color=wallColor, IsBinaryOccupied=true);
+% addMesh(scenario, "Box", Position=[wallLength/2, wallLength/2, wallHeight/2], ...
+%     Size=[wallWidth, wallLength/3, wallHeight], Color=wallColor, IsBinaryOccupied=true);
 
 % Wyświetlenie sceny
 show3D(scenario);
@@ -47,9 +47,9 @@ show(map);
 startPosition = [1 1];
 goalPosition = [8 8];
 
-numnodes = 500;
+numnodes = 5;
 planner = mobileRobotPRM(map, numnodes);
-planner.ConnectionDistance = 1;
+planner.ConnectionDistance = 5;
 waypoints = findpath(planner, startPosition, goalPosition);
 
 %% Robot
@@ -67,13 +67,10 @@ huskyRobot = loadrobot("clearpathHusky");
 platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
     BaseTrajectory=traj);
 
-%% SENSOR INS
-insModel = insSensor(YawAccuracy=10,PitchAccuracy=10,RollAccuracy=10,HasGNSSFix=true);
-
 %% Sensor LIDAR - zaktualizowana konfiguracja 3D
 lidarModel = robotLidarPointCloudGenerator(...
     UpdateRate=100, ...
-    MaxRange=5, ...
+    MaxRange=10, ...
     RangeAccuracy=0.20, ...
     AzimuthResolution=0.16, ...
     ElevationResolution=1.25, ...
@@ -198,6 +195,3 @@ xlabel('X [m]');
 ylabel('Y [m]');
 zlabel('Z [m]');
 grid on;
-
-%% slam
-
