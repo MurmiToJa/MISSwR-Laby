@@ -41,14 +41,14 @@ view(60,60);
 %% Tworzenie mapy binarnej
 map = binaryOccupancyMap(scenario, GridOriginInLocal=[-2 -2], ...
     MapSize=[15 15], MapHeightLimits=[0 3]);
-inflate(map,0.3);
+inflate(map,0.5);
 show(map);
 
 %% Planowanie trasy
-startPosition = [2 2];
+startPosition = [1.5 1.5];
 goalPosition = [8 8];
 
-numnodes = 100;
+numnodes = 300;
 planner = mobileRobotPRM(map, numnodes);
 planner.ConnectionDistance = 10;
 waypoints = findpath(planner, startPosition, goalPosition);
@@ -68,27 +68,27 @@ huskyRobot = loadrobot("clearpathHusky");
 platform = robotPlatform("husky", scenario, RigidBodyTree=huskyRobot, ...
     BaseTrajectory=traj);
 
-%% SENSOR INS
-%insModel = insSensor(YawAccuracy=10,PitchAccuracy=10,RollAccuracy=10,HasGNSSFix=true);
 
-%% Sensor LIDAR - zaktualizowana konfiguracja 3D
+%% Sensor LIDAR - zaktualizowana konfiguracja 3D\
+Lidar_Range = 5;
+
 lidarModel = robotLidarPointCloudGenerator(...
     UpdateRate=100, ...
-    MaxRange=10, ...
+    MaxRange=5, ...
     RangeAccuracy=0.20, ...
     AzimuthResolution=0.16, ...
     ElevationResolution=1.25, ...
-    AzimuthLimits=[-180 180], ... % 180° w poziomie
-    ElevationLimits=[0 10], ...  % Skanowanie w zakresie -15° do +15° w pionie
+    AzimuthLimits=[-180 180], ...
+    ElevationLimits=[0 10], ...  
     HasNoise=false, ...
     HasOrganizedOutput=true);
 
 lidar = robotSensor("lidar", platform, lidarModel, ...
-    MountingLocation=[0 0 0.3], MountingAngles=[0 0 0], UpdateRate=100);
+    MountingLocation=[0 0 0.3], MountingAngles=[0 0 0],UpdateRate=100);
 
 %% Inicjalizacja SLAM
-maxLidarRange = 10;       % Maksymalny zasięg LIDAR-a
-mapResolution = 20;       % Rozdzielczość mapy (punkty na metr)
+maxLidarRange = 10;       
+mapResolution = 20;      
 
 % Inicjalizacja obiektu SLAM
 slamAlg = lidarSLAM(mapResolution, maxLidarRange);
@@ -123,14 +123,6 @@ globalPointCloud = pointCloud(zeros(0,3));
 timestamps = [];           
 disp("Rozpoczynam symulację...");
 
-% % Inicjalizacja wizualizacji SLAM
-% figure('Name', 'SLAM Visualization', 'NumberTitle', 'off');
-% slamAx = axes;
-% title(slamAx, 'Mapa budowana w czasie rzeczywistym');
-% xlabel(slamAx, 'X [m]');
-% ylabel(slamAx, 'Y [m]');
-% hold(slamAx, 'on');
-% grid(slamAx, 'on');
 initialPosition = [];
 
 %% Pętla główna
@@ -158,29 +150,19 @@ while advance(scenario)
         xyzPoints = xyzPoints(validPoints, :);
         xyzPoints = xyzPoints + [0 0 0.3]; % LIDAR offset
         
-        % Konwersja do skanów 2D dla SLAM (biorąc pod uwagę tylko płaszczyznę XY)
-    % if mod(scanCount, 3) == 0
-    %     addScan(slamAlg, scan);
-    % end
-
         scan = lidarScan(xyzPoints(:,1:2));
         
         % Dodanie skanu do SLAM
             if ~isempty(scan.Ranges)
-                % Dodajemy skan co 5 iteracji
+                % skan co 5 iteracji
                 if mod(scanCount, 15) == 0
                     [isScanAccepted, loopClosureInfo, optimizationInfo] = addScan(slamAlg, scan);
                     
                     % Aktualizacja wizualizacji SLAM
                     if isScanAccepted
-                        % Opcjonalnie możesz tutaj dodać kod wizualizacji SLAM
-                        % cla(slamAx);
-                        % show(slamAlg, 'Parent', slamAx);
-                        % drawnow;
                     end
                 end
                 
-                % Zwiększamy licznik niezależnie od tego, czy skan został dodany
                 scanCount = scanCount + 1;
             end
         

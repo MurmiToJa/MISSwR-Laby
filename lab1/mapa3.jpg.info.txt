@@ -1,0 +1,5 @@
+Resolution: 1 pixels per meter
+Grid size: 1 pixels
+Grid dimensions: 30x30 cells
+Image dimensions: 30x30 pixels
+Format: Binary map (0=free space, 1=obstacle)
