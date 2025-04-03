@@ -92,7 +92,7 @@ function processMap(mapFile, params, colors, pathColors, mainFolder, fid, mapIdx
     % Binaryzacja mapy - ściany są czarne (0), wolna przestrzeń jest biała (1)
     binMapa = mapa > 128;
     [height, width] = size(binMapa);
-    block_size = 5; % Rozmiar przeszkód
+    block_size = 1; % Rozmiar przeszkód
     
     % Dla każdej liczby przeszkód
     for obstIdx = 1:length(num_obstacles_list)

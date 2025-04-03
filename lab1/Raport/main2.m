@@ -57,7 +57,7 @@ for map_idx = 1:3
         % Pozostałe parametry
         start = [start_point 0]; % Punkt startowy z orientacją
         goal = [end_point 0];    % Punkt końcowy z orientacją
-        block_size = 5;          % Rozmiar przeszkód
+        block_size = 2;          % Rozmiar przeszkód
         
         % Inicjalizuj numNodesList z odpowiednią długością
         numNodesList = zeros(1, length(MaxConnectionDistance));

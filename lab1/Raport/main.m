@@ -18,14 +18,14 @@ close all;
 %trzecia mapa
 start_point = [3, 2];
 end_point = [28, 27];
-MaxConnectionDistance = [1,2,3];
+MaxConnectionDistance = [3];
 
 
 
 start = [start_point 0]; % Punkt startowy z orientacją
 goal = [end_point 0];    % Punkt końcowy z orientacją
-block_size = 5;          % Rozmiar przeszkód
-num_obstacles = [0,5,10];       % Liczba przeszkód do wygenerowania
+block_size = 2;          % Rozmiar przeszkód
+num_obstacles = 5;       % Liczba przeszkód do wygenerowania
 numNodesList = [0,0,0]; % Liczby węzłów do testowania
 colors = ["b", "g", "m"];       % Kolory dla różnych liczby węzłów
 pathColors = ["r", "c", "y"];   % Kolory dla głównej ścieżki na każdej figurze
